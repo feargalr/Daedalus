@@ -1,5 +1,5 @@
 # Daedalus
-A pipeline for metagenomic assembly and the identification of cross-reactive epitopes from metagenomic data.
+Like its namesake, Daedalus assembles things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes.
 
 ## **Overview**
 **Daedalus** is a bioinformatics pipeline that assembles metagenomes, predicts all genes, and identifies cross-reactive epitopes from metagenomic data. It integrates **MetaSPAdes** for assembly, **Prodigal-GV** for gene prediction, and **SeqKit** for epitope sequence searches.  
