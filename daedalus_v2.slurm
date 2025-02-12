@@ -11,7 +11,6 @@
 # Author: Feargal J. Ryan
 # Date: 2025-02-12
 # GitHub: https://github.com/feargalr/
-# Email: feargalr@gmail.com
 # Description: Daedalus pipeline for finding cross-reactive epitopes in shotgun metagenomics data
 
 # Activate conda environment
