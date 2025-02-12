@@ -16,7 +16,7 @@ git clone https://github.com/yourusername/Daedalus.git
 cd Daedalus
 ```
 
-### **2. Install dependencies **
+### **2. Install dependencies**
 ```bash
 conda env create -f daedalus_env.yml
 conda activate daedalus
