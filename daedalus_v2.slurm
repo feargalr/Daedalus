@@ -14,8 +14,8 @@
 # Description: Daedalus pipeline for finding cross-reactive epitopes in shotgun metagenomics data
 
 # Activate conda environment
-source /software/projects/pawsey1180/fryan/miniconda3/etc/profile.d/conda.sh
-conda activate /software/projects/pawsey1180/fryan/miniconda3/envs/daedalus
+source path2conda.sh
+conda activate daedalus
 
 # Run MetaSPAdes
 spades.py --meta -1 *_1.fastq.gz -2 *_2.fastq.gz \
