@@ -12,7 +12,7 @@ Like its namesake, Daedalus assembles things. This pipeline was built for metage
 ## **Installation**
 ### **1. Clone the Repository**
 ```bash
-git clone https://github.com/yourusername/Daedalus.git
+git clone https://github.com/feargalr/Daedalus.git
 cd Daedalus
 ```
 
