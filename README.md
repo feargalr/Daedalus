@@ -8,8 +8,9 @@ Like its namesake, Daedalus builds things. This pipeline was built for metagenom
 - **MetaSPAdes** – for assembly  
 - **Prodigal-GV** – for gene prediction  
 - **SeqKit** – for searching epitope sequences  
+- **Pigz** – for searching epitope sequences  
 
-Everything is wrapped into a single command-line script: `daedalus.sh`.
+Everything is wrapped into a single command-line script: `daedalus.sh`. You can simply give daedalus an SRA ID and it will return a list of epitopes identified in that sample post-assembly.
 
 ## **Pipeline Workflow**
 1. **Metagenomic Assembly**  
@@ -19,7 +20,10 @@ Everything is wrapped into a single command-line script: `daedalus.sh`.
    Predicts genes using a parallel version of Prodigal-GV.
 
 3. **Epitope Search**  
-   Scans predicted proteins for epitope matches using SeqKit.
+   Scans predicted proteins for epitope matches using SeqKit.'
+
+3. **Compression**  
+   Compress outputs using pigz
 
 ## **Installation**
 
@@ -36,7 +40,7 @@ conda activate daedalus
 
 #For multi-threaded gene prediction use the parallel-prodigal-gv.py script available here
 git clone https://github.com/apcamargo/prodigal-gv
-Then copy or symlink `parallel-prodigal-gv.py` to your `$PATH`, or edit the path in `daedalus.sh` to match your setup.
+#Then copy or symlink `parallel-prodigal-gv.py` to your `$PATH`, or edit the path in `daedalus.sh` to match your setup.
 ```
 
 ## **Usage**
