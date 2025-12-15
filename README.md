@@ -52,9 +52,16 @@ cd Daedalus
 conda env create -f daedalus_env.yml
 conda activate daedalus
 
+# After activating the conda environment, install the `daedalus` executable into the environment:
+
+cp daedalus "$CONDA_PREFIX/bin/daedalus"
+
 #For multi-threaded gene prediction use the parallel-prodigal-gv.py script available here
 git clone https://github.com/apcamargo/prodigal-gv
 #Then copy or symlink `parallel-prodigal-gv.py` to your `$PATH`, or edit the path in `daedalus.sh` to match your setup.
+
+#Ensure the nohuman db location is either specified with the flag or set at the $NOHUMAN_DB variable.
+
 ```
 
 ## **Usage**
