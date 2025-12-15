@@ -1,6 +1,7 @@
 # Daedalus
 
-Like its namesake, Daedalus builds things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes.
+Like its namesake, Daedalus builds things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes. Daedalus is a wrapper pipeline that orchestrates several established bioinformatics tools, and so we *strongly encourage* users cite the underlying software components appropriately in any resulting publications.
+
 
 ## **Overview**
 **Daedalus** is a bioinformatics pipeline that assembles metagenomes, predicts genes, and identifies cross-reactive epitopes from metagenomic data. It integrates:
@@ -25,8 +26,7 @@ Everything is wrapped into a single executable: daedalus. You can simply give da
    - Quality filtering and adapter trimming using **fastp**.
 
 3. **Host read removal**
-   - Removal of human reads using **nohuman** with a user-supplied database.
-
+   - Removal of human reads using **nohuman**. Please see the [nohuman GitHub repository](https://github.com/mbhall88/nohuman) for the most up-to-date recommendations on which database to use.
 4. **Metagenomic assembly**
    - Assembly of filtered reads using **MetaSPAdes**.
 
@@ -87,12 +87,9 @@ Examples:
 - **SRA accession** *or* paired FASTQ files: Provide one or the other.
 
 ## **Output**
-- 'sra_fastq/': SRA downloaded files.
-- 'fastp_output/': Quality filtered reads and nohuman removed reads.
+- `sra_fastq/`: SRA downloaded files.
+- `fastp_output/`: Quality filtered reads and nohuman removed reads.
 - `spades_output/`: Contains assembled scaffolds and protein predictions.
 - `all_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
-- 'epitope_counts.txt': Count of number of exact matches greater than length 4.
+- `epitope_counts.txt`: Count of number of exact matches greater than length 4.
 
-## **Notes**
-- SRA downloads are handled via `fasterq-dump`.
-- Intermediate and final files are compressed with `pigz` for efficiency.
