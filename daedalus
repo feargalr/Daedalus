@@ -1,0 +1,237 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+DAEDALUS_VERSION="0.2.0"
+
+# Default values
+SRA_ID=""
+NUM_CORES=1
+MEM_GB=8
+EPI_FASTA=""
+READ1=""
+READ2=""
+FASTP_DIR="fastp_output"
+
+# Help message
+show_help() {
+    echo "
+Daedalus Pipeline
+
+Usage:
+  daedalus -e <epitope_fasta> -n <num_cores> -m <memory_gb> [--sra <SRA_ID>] [--read1 <read1.fastq.gz> --read2 <read2.fastq.gz>]
+
+Flags:
+  -e, --epitopes      Path to epitope FASTA file (required)
+  -n, --num-cores     Number of cores (default: 1)
+  -m, --memory        Memory in GB (default: 8)
+  --sra <SRA_ID>      SRA accession ID (optional)
+  --read1 <file>      Path to local R1 FASTQ file (required if no SRA)
+  --read2 <file>      Path to local R2 FASTQ file (required if no SRA)
+  --nohuman-db <path>   Path to nohuman database (or set $NOHUMAN_DB)
+  -h, --help          Show this help message
+  -V, --version       Print version and exit
+
+Notes:
+- If --sra is provided, local --read1 and --read2 are ignored.
+- If no SRA is provided, both --read1 and --read2 must be specified.
+
+Examples:
+  daedalus --sra SRR123456 -e epitopes.fasta -n 32 -m 64
+  daedalus --read1 sample_1.fastq.gz --read2 sample_2.fastq.gz -e epitopes.fasta -n 16 -m 32
+"
+}
+
+# Parse flags
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -n|--num-cores) NUM_CORES="$2"; shift ;;
+        -m|--memory) MEM_GB="$2"; shift ;;
+        -e|--epitopes) EPI_FASTA="$2"; shift ;;
+        --sra) SRA_ID="$2"; shift ;;
+        --read1) READ1="$2"; shift ;;
+        --read2) READ2="$2"; shift ;;
+        --nohuman-db) NOHUMAN_DB="$2"; shift ;;
+        -h|--help) show_help; exit 0 ;;
+        -V|--version) echo "daedalus ${DAEDALUS_VERSION}"; exit 0 ;;
+        *) echo "Unknown parameter passed: $1"; show_help; exit 1 ;;
+    esac
+    shift
+done
+
+
+
+
+# Check required arguments
+if [ -z "$EPI_FASTA" ]; then
+    echo "ERROR: Epitope FASTA file (-e) is required."
+    show_help
+    exit 1
+fi
+
+if [ -n "$SRA_ID" ]; then
+    echo "Using SRA accession: $SRA_ID"
+elif [ -n "$READ1" ] && [ -n "$READ2" ]; then
+    echo "Using local FASTQ files: $READ1, $READ2"
+else
+    echo "ERROR: Provide either --sra <SRA_ID> or both --read1 and --read2."
+    show_help
+    exit 1
+fi
+
+
+if [[ -z "${NOHUMAN_DB}" ]]; then
+  echo "ERROR: nohuman DB not set. Use --nohuman-db /path/to/db or export NOHUMAN_DB=/path/to/db" >&2
+  exit 1
+fi
+if [[ ! -e "${NOHUMAN_DB}" ]]; then
+  echo "ERROR: nohuman DB not found at: ${NOHUMAN_DB}" >&2
+  exit 1
+fi
+
+
+mkdir -p "${FASTP_DIR}"
+
+# Handle SRA or local FASTQ
+if [ -n "$SRA_ID" ]; then
+    mkdir -p sra_fastq
+    fasterq-dump $SRA_ID --split-files -O sra_fastq
+
+    if [ -f "sra_fastq/${SRA_ID}_1.fastq" ] && [ -f "sra_fastq/${SRA_ID}_2.fastq" ]; then
+
+        pigz -p $NUM_CORES -9 sra_fastq/*fastq ; 
+        RAW_R1="sra_fastq/${SRA_ID}_1.fastq.gz"
+        RAW_R2="sra_fastq/${SRA_ID}_2.fastq.gz" 
+    elif [ -f "sra_fastq/${SRA_ID}.fastq" ]; then
+        pigz -p $NUM_CORES -9 sra_fastq/*fastq ;
+        RAW_SE="sra_fastq/${SRA_ID}.fastq.gz"
+    else
+        echo "ERROR: SRA download failed or produced no FASTQ files. Exiting."
+        exit 1
+    fi
+else
+    if [ ! -f "$READ1" ] || [ ! -f "$READ2" ]; then
+        echo "ERROR: One or both local FASTQ files not found. Exiting."
+        exit 1
+    fi
+    RAW_R1="${READ1}"; RAW_R2="${READ2}"
+fi
+
+
+# ---------------------------
+# fastp preprocessing
+# ---------------------------
+CLEAN_R1=""; CLEAN_R2=""; CLEAN_SE=""
+if [[ -n "${RAW_R1}" && -n "${RAW_R2}" ]]; then
+    BASE="$(basename "${RAW_R1}")"
+    SAMPLE="${BASE%%_*}"  # heuristic; keeps SRR... or sample prefix
+    CLEAN_R1="${FASTP_DIR}/${SAMPLE}_R1.clean.fq.gz"
+    CLEAN_R2="${FASTP_DIR}/${SAMPLE}_R2.clean.fq.gz"
+    REPORT_HTML="${FASTP_DIR}/${SAMPLE}.fastp.html"
+    REPORT_JSON="${FASTP_DIR}/${SAMPLE}.fastp.json"
+
+    echo "[*] Running fastp (PE)..."
+    fastp -w "${NUM_CORES}" \
+          -i "${RAW_R1}" -I "${RAW_R2}" \
+          -o "${CLEAN_R1}" -O "${CLEAN_R2}" \
+          --detect_adapter_for_pe \
+          --qualified_quality_phred 15 \
+          --length_required 50 \
+          -h "${REPORT_HTML}" -j "${REPORT_JSON}"
+
+elif [[ -n "${RAW_SE}" ]]; then
+    SAMPLE="$(basename "${RAW_SE}" .fastq.gz)"
+    CLEAN_SE="${FASTP_DIR}/${SAMPLE}.clean.fq.gz"
+    REPORT_HTML="${FASTP_DIR}/${SAMPLE}.fastp.html"
+    REPORT_JSON="${FASTP_DIR}/${SAMPLE}.fastp.json"
+
+    echo "[*] Running fastp (SE)..."
+    fastp -w "${NUM_CORES}" \
+          -i "${RAW_SE}" \
+          -o "${CLEAN_SE}" \
+          --qualified_quality_phred 15 --length_required 50 \
+          -h "${REPORT_HTML}" -j "${REPORT_JSON}"
+else
+    echo "ERROR: Input detection failed before fastp."; exit 1
+fi
+
+
+# ---------------------------
+# nohuman filtering
+# ---------------------------
+
+if [[ -n "${CLEAN_R1}" && -n "${CLEAN_R2}" ]]; then
+    NOHUMAN_R1="${FASTP_DIR}/${SAMPLE}_R1.nohuman.fq.gz"
+    NOHUMAN_R2="${FASTP_DIR}/${SAMPLE}_R2.nohuman.fq.gz"
+    KRAKEN_REPORT="${FASTP_DIR}/${SAMPLE}.nohuman.kraken.report"
+
+    echo "[*] Running nohuman (PE)..."
+    nohuman \
+        -t "${NUM_CORES}" \
+        -D "${NOHUMAN_DB}" \
+        -o "${NOHUMAN_R1}" \
+        -O "${NOHUMAN_R2}" \
+        -r "${KRAKEN_REPORT}" \
+        "${CLEAN_R1}" "${CLEAN_R2}"
+
+elif [[ -n "${CLEAN_SE}" ]]; then
+    NOHUMAN_SE="${FASTP_DIR}/${SAMPLE}.nohuman.fq.gz"
+    KRAKEN_REPORT="${FASTP_DIR}/${SAMPLE}.nohuman.kraken.report"
+
+    echo "[*] Running nohuman (SE)..."
+    nohuman \
+        -t "${NUM_CORES}" \
+        -D "${NOHUMAN_DB}" \
+        -o "${NOHUMAN_SE}" \
+        -r "${KRAKEN_REPORT}" \
+        "${CLEAN_SE}"
+fi
+
+
+# ---------------------------
+# MetaSPAdes
+# ---------------------------
+
+echo "Running MetaSPAdes..."
+
+if [[ -n "${NOHUMAN_R1}" && -n "${NOHUMAN_R2}" ]]; then
+  spades.py --meta \
+    -1 "${NOHUMAN_R1}" \
+    -2 "${NOHUMAN_R2}" \
+    -o spades_output \
+    -t "${NUM_CORES}" \
+    --memory "${MEM_GB}"
+elif [[ -n "${NOHUMAN_SE}" ]]; then
+  spades.py --meta \
+    -s "${NOHUMAN_SE}" \
+    -o spades_output \
+    -t "${NUM_CORES}" \
+    --memory "${MEM_GB}"
+else
+  echo "ERROR: No cleaned reads available for SPAdes."; exit 1
+fi
+
+
+# ---------------------------
+# Prodigal-GV
+# ---------------------------
+cd spades_output
+echo "Running Prodigal-GV..."
+python3 /home/fryan/bin/parallel-prodigal-gv.py -t $NUM_CORES -q -i scaffolds.fasta -a proteins.faa
+
+# ---------------------------
+# Epitope search
+# ---------------------------
+echo "Running SeqKit epitope search..."
+seqkit locate -m 1 -j $NUM_CORES --pattern-file "$EPI_FASTA" proteins.faa >> ../all_matches.txt
+
+cd ..
+
+awk -F'\t' 'length($3) >= 4 && $3 == $7 { OFS="\t"; print $2, $3 }' all_matches.txt | cut -f 3 | sort | uniq -c | awk '{print $1 "\t" $2}' > epitope_counts.txt
+# ---------------------------
+# Compress heavy outputs
+# ---------------------------
+echo "Compressing outputs..."
+pigz -p $NUM_CORES -9 spades_output/*fasta spades_output/*faa spades_output/*fastg spades_output/*gfa
+
+echo "Daedalus pipeline completed successfully!"

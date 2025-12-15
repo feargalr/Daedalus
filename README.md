@@ -5,25 +5,39 @@ Like its namesake, Daedalus builds things. This pipeline was built for metagenom
 ## **Overview**
 **Daedalus** is a bioinformatics pipeline that assembles metagenomes, predicts genes, and identifies cross-reactive epitopes from metagenomic data. It integrates:
 
+- **SRA-Tools** - for downloading sequenceing data from the SRA (optional)
+- **fastp** - for read quality control and filtering
+- **nohuman**- for remove of human reads
 - **MetaSPAdes** – for assembly  
 - **Prodigal-GV** – for gene prediction  
 - **SeqKit** – for searching epitope sequences  
-- **Pigz** – for searching epitope sequences  
+- **Pigz** – for compressing output  
 
-Everything is wrapped into a single command-line script: `daedalus.sh`. You can simply give daedalus an SRA ID and it will return a list of epitopes identified in that sample post-assembly.
+Everything is wrapped into a single executable: daedalus. You can simply give daedalus an SRA ID and it will return a list of epitopes identified in that sample post-assembly.
 
 ## **Pipeline Workflow**
-1. **Metagenomic Assembly**  
-   Uses MetaSPAdes to assemble sequencing reads (from SRA ID or local FASTQs).
 
-2. **Gene Prediction**  
-   Predicts genes using a parallel version of Prodigal-GV.
+1. **Input acquisition**
+   - Download reads from the SRA using `fasterq-dump`, or
+   - Use local paired-end FASTQ files.
 
-3. **Epitope Search**  
-   Scans predicted proteins for epitope matches using SeqKit.'
+2. **Read quality control**
+   - Quality filtering and adapter trimming using **fastp**.
 
-3. **Compression**  
-   Compress outputs using pigz
+3. **Host read removal**
+   - Removal of human reads using **nohuman** with a user-supplied database.
+
+4. **Metagenomic assembly**
+   - Assembly of filtered reads using **MetaSPAdes**.
+
+5. **Gene prediction**
+   - Prediction of protein-coding genes using **Prodigal-GV**.
+
+6. **Epitope search**
+   - Identification of epitope matches in predicted proteins using **SeqKit**.
+
+7. **Output compression**
+   - Compression of large intermediate and final outputs using **pigz**.
 
 ## **Installation**
 
@@ -46,7 +60,7 @@ git clone https://github.com/apcamargo/prodigal-gv
 ## **Usage**
 ```bash
 Usage:
-  bash daedalus.sh -e <epitope_fasta> -n <num_cores> -m <memory_gb> [--sra <SRA_ID>] [--read1 <read1.fastq.gz> --read2 <read2.fastq.gz>]
+  daedalus -e <epitope_fasta> -n <num_cores> -m <memory_gb> [--sra <SRA_ID>] [--read1 <read1.fastq.gz> --read2 <read2.fastq.gz>]
 
 Flags:
   -e, --epitopes      Path to epitope FASTA file (required)
@@ -55,15 +69,17 @@ Flags:
   --sra <SRA_ID>      SRA accession ID (optional)
   --read1 <file>      Path to local R1 FASTQ file (required if no SRA)
   --read2 <file>      Path to local R2 FASTQ file (required if no SRA)
+  --nohuman-db <path>   Path to nohuman database (or set $NOHUMAN_DB)
   -h, --help          Show this help message
+  -V, --version       Print version and exit
 
 Notes:
 - If --sra is provided, local --read1 and --read2 are ignored.
 - If no SRA is provided, both --read1 and --read2 must be specified.
 
 Examples:
-  bash daedalus.sh --sra SRR123456 -e epitopes.fasta -n 32 -m 64
-  bash daedalus.sh --read1 sample_1.fastq.gz --read2 sample_2.fastq.gz -e epitopes.fasta -n 16 -m 32
+  daedalus --sra SRR123456 -e epitopes.fasta -n 32 -m 64
+  daedalus --read1 sample_1.fastq.gz --read2 sample_2.fastq.gz -e epitopes.fasta -n 16 -m 32
 ```
 
 ## **Inputs**
@@ -71,8 +87,11 @@ Examples:
 - **SRA accession** *or* paired FASTQ files: Provide one or the other.
 
 ## **Output**
+- 'sra_fastq/': SRA downloaded files.
+- 'fastp_output/': Quality filtered reads and nohuman removed reads.
 - `spades_output/`: Contains assembled scaffolds and protein predictions.
-- `daedalus_results.txt`: List of matched epitopes.
+- `all_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
+- 'epitope_counts.txt': Count of number of exact matches greater than length 4.
 
 ## **Notes**
 - SRA downloads are handled via `fasterq-dump`.
