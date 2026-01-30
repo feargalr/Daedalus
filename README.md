@@ -1,4 +1,5 @@
 # Daedalus
+**Version:** 0.3.0
 
 Like its namesake, Daedalus builds things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes. Daedalus is a wrapper pipeline that orchestrates several established bioinformatics tools, and so we *strongly encourage* users cite the underlying software components appropriately in any resulting publications.
 
@@ -11,7 +12,7 @@ Like its namesake, Daedalus builds things. This pipeline was built for metagenom
 - **nohuman**- for remove of human reads
 - **MetaSPAdes** – for assembly  
 - **Prodigal-GV** – for gene prediction  
-- **SeqKit** – for searching epitope sequences  
+- **Aho-Corasick algorithm** – for searching epitope sequences  
 - **Pigz** – for compressing output  
 
 Everything is wrapped into a single executable: daedalus. You can simply give daedalus an SRA ID and it will return a list of epitopes identified in that sample post-assembly.
@@ -34,7 +35,7 @@ Everything is wrapped into a single executable: daedalus. You can simply give da
    - Prediction of protein-coding genes using **Prodigal-GV**.
 
 6. **Epitope search**
-   - Identification of epitope matches in predicted proteins using **SeqKit**.
+   - Identification of epitope matches in predicted proteins using **Aho-Corasick implemtned via **.
 
 7. **Output compression**
    - Compression of large intermediate and final outputs using **pigz**.
@@ -50,6 +51,7 @@ cd Daedalus
 ### **2. Install dependencies**
 ```bash
 conda env create -f daedalus_env.yml
+conda env create -f acmatch_env.yml
 conda activate daedalus
 
 # After activating the conda environment, install the `daedalus` executable into the environment:
@@ -63,6 +65,7 @@ git clone https://github.com/apcamargo/prodigal-gv
 #Ensure the nohuman db location is either specified with the flag or set at the $NOHUMAN_DB variable.
 
 ```
+
 
 ## **Usage**
 ```bash
@@ -97,6 +100,15 @@ Examples:
 - `sra_fastq/`: SRA downloaded files.
 - `fastp_output/`: Quality filtered reads and nohuman removed reads.
 - `spades_output/`: Contains assembled scaffolds and protein predictions.
-- `all_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
+- `ac_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
 - `epitope_counts.txt`: Count of number of exact matches greater than length 4.
 
+=======
+- `acmatch_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
+
+## **Notes**
+- SRA downloads are handled via `fasterq-dump`.
+- Intermediate and final files are compressed with `pigz` for efficiency.
+- Designed for paired-end Illumina shotgun metagenomic data
+- Assumes human host for read removal
+- Assembly-based approach may miss low-abundance epitopes

@@ -1,0 +1,9 @@
+name: acmatch
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+prefix: /software/projects/pawsey1244/fryan/miniconda3/envs/acmatch

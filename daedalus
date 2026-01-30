@@ -2,7 +2,48 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-DAEDALUS_VERSION="0.2.0"
+DAEDALUS_VERSION="0.3.0"
+
+
+#======================#
+# Handling dependancies
+#======================#
+
+DAEDALUS_ENV="daedalus"
+ACMATCH_ENV="acmatch"
+
+error() {
+  echo "Daedalus error: $*" >&2
+  exit 1
+}
+
+# ---- Conda bootstrap ----
+if ! command -v conda >/dev/null 2>&1; then
+  error "conda not found in PATH"
+fi
+
+# shellcheck disable=SC1091
+source "$(conda info --base)/etc/profile.d/conda.sh" \
+  || error "Failed to source conda.sh"
+
+# ---- Check required environments ----
+for ENV in "$DAEDALUS_ENV" "$ACMATCH_ENV"; do
+  if ! conda env list | awk '{print $1}' | grep -qx "$ENV"; then
+    error "Required conda environment '$ENV' does not exist"
+  fi
+done
+
+# ---- Activate primary env ----
+conda activate "$DAEDALUS_ENV" \
+  || error "Failed to activate conda environment '$DAEDALUS_ENV'"
+
+echo "Daedalus v$DAEDALUS_VERSION"
+echo "Active env: $DAEDALUS_ENV ($(python --version))"
+
+
+#=======================
+
+
 
 # Default values
 SRA_ID=""
@@ -219,15 +260,37 @@ cd spades_output
 echo "Running Prodigal-GV..."
 python3 /home/fryan/bin/parallel-prodigal-gv.py -t $NUM_CORES -q -i scaffolds.fasta -a proteins.faa
 
+
 # ---------------------------
 # Epitope search
 # ---------------------------
-echo "Running SeqKit epitope search..."
-seqkit locate -m 1 -j $NUM_CORES --pattern-file "$EPI_FASTA" proteins.faa >> ../all_matches.txt
+echo "Aho-Corasick algorithm epitope search..."
 
-cd ..
+EPITOPES=/scratch/pawsey1244/fryan/data_resources/daedalus_db/epitopes.faa
+PROTEINS=proteins.faa                                                      
+OUT=ac_matches.tsv
 
-awk -F'\t' 'length($3) >= 4 && $3 == $7 { OFS="\t"; print $2, $3 }' all_matches.txt | cut -f 3 | sort | uniq -c | awk '{print $1 "\t" $2}' > epitope_counts.txt
+
+conda activate acmatch
+
+WORKDIR="${MYSCRATCH:-$PWD}/acmatch_${SLURM_JOB_ID}"
+mkdir -p "$WORKDIR"
+cp "$PROTEINS" "$WORKDIR/proteins.faa"
+
+python ac_match.py \
+  --epitopes "$EPITOPES" \
+  --proteins "$WORKDIR/proteins.faa" \
+  --out "$WORKDIR/$OUT" \
+  --min-len 8 \
+  --max-len 30 \
+
+
+cp "$WORKDIR/$OUT" .
+
+# clean
+rm -rf "$WORKDIR"
+
+
 # ---------------------------
 # Compress heavy outputs
 # ---------------------------
