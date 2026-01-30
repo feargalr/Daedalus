@@ -35,7 +35,7 @@ Everything is wrapped into a single executable: daedalus. You can simply give da
    - Prediction of protein-coding genes using **Prodigal-GV**.
 
 6. **Epitope search**
-   - Identification of epitope matches in predicted proteins using **Aho-Corasick implemtned via **.
+   - Identification of epitope matches in predicted proteins using **Aho–Corasick string-matching algorithm implemented in acmatch in Python**.
 
 7. **Output compression**
    - Compression of large intermediate and final outputs using **pigz**.
