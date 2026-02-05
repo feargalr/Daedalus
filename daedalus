@@ -2,7 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-DAEDALUS_VERSION="0.3.0"
+DAEDALUS_VERSION="0.3.1"
 
 
 #======================#
@@ -277,7 +277,15 @@ WORKDIR="${MYSCRATCH:-$PWD}/acmatch_${SLURM_JOB_ID}"
 mkdir -p "$WORKDIR"
 cp "$PROTEINS" "$WORKDIR/proteins.faa"
 
-python ac_match.py \
+ACMATCH_SCRIPT="$CONDA_PREFIX/share/daedalus/ac_match.py"
+
+if [[ ! -f "$ACMATCH_SCRIPT" ]]; then
+  echo "[ERROR] ac_match.py not found at $ACMATCH_SCRIPT"
+  echo "Did you install Daedalus correctly?"
+  exit 1
+fi
+
+python "$ACMATCH_SCRIPT" \
   --epitopes "$EPITOPES" \
   --proteins "$WORKDIR/proteins.faa" \
   --out "$WORKDIR/$OUT" \
@@ -295,6 +303,7 @@ rm -rf "$WORKDIR"
 # Compress heavy outputs
 # ---------------------------
 echo "Compressing outputs..."
-pigz -p $NUM_CORES -9 spades_output/*fasta spades_output/*faa spades_output/*fastg spades_output/*gfa
+conda activate daedalus
+pigz -p $NUM_CORES -9 *fasta *faa *fastg *gfa
 
 echo "Daedalus pipeline completed successfully!"

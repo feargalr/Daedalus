@@ -1,7 +1,10 @@
 # Daedalus
-**Version:** 0.3.0
+**Version:** 0.3.1
 
 Like its namesake, Daedalus builds things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes. Daedalus is a wrapper pipeline that orchestrates several established bioinformatics tools, and so we *strongly encourage* users cite the underlying software components appropriately in any resulting publications.
+
+Daedalus searches for short, exact peptide matches between predicted microbial proteins and known epitopes, typically in the 8–15 amino acid range. This reflects the biology of antigen presentation, as MHC class I epitopes are usually 8–11 aa, while MHC class II epitopes contain shorter core motifs. T cell cross-reactivity can arise from identical short peptides embedded within otherwise unrelated proteins. For this reason, epitope detection is treated as a string-matching problem, rather than a homology search.
+To efficiently detect these matches at scale, Daedalus uses the Aho–Corasick algorithm, which enables simultaneous, exact matching of millions of epitope sequences against large protein databases in a single pass.
 
 
 ## **Overview**
@@ -54,9 +57,12 @@ conda env create -f daedalus_env.yml
 conda env create -f acmatch_env.yml
 conda activate daedalus
 
-# After activating the conda environment, install the `daedalus` executable into the environment:
+# After activating the conda environment, install the `daedalus` executable and ac_match script into the environment:
 
 cp daedalus "$CONDA_PREFIX/bin/daedalus"
+
+mkdir -p "$CONDA_PREFIX/share/daedalus"
+cp scripts/ac_match.py "$CONDA_PREFIX/share/daedalus/ac_match.py"
 
 #For multi-threaded gene prediction use the parallel-prodigal-gv.py script available here
 git clone https://github.com/apcamargo/prodigal-gv
