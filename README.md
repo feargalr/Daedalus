@@ -53,8 +53,8 @@ cd Daedalus
 
 ### **2. Install dependencies**
 ```bash
-conda env create -f daedalus_env.yml
-conda env create -f acmatch_env.yml
+conda env create -f conda_ymls/daedalus_env.yml
+conda env create -f conda_ymls/acmatch_env.yml
 conda activate daedalus
 
 # After activating the conda environment, install the `daedalus` executable and ac_match script into the environment:
