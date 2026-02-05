@@ -8,7 +8,7 @@ To efficiently detect these matches at scale, Daedalus uses the Aho–Corasick a
 
 
 ## **Overview**
-**Daedalus** is a bioinformatics pipeline that assembles metagenomes, predicts genes, and identifies cross-reactive epitopes from metagenomic data. It integrates:
+**Daedalus** assembles metagenomes, predicts genes, and identifies cross-reactive epitopes from metagenomic data. It integrates:
 
 - **SRA-Tools** - for downloading sequenceing data from the SRA (optional)
 - **fastp** - for read quality control and filtering
@@ -106,11 +106,8 @@ Examples:
 - `sra_fastq/`: SRA downloaded files.
 - `fastp_output/`: Quality filtered reads and nohuman removed reads.
 - `spades_output/`: Contains assembled scaffolds and protein predictions.
-- `ac_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
-- `epitope_counts.txt`: Count of number of exact matches greater than length 4.
+- `ac_matches.txt`: List of matched epitopes and corresponding genes
 
-=======
-- `acmatch_matches.txt`: List of matched epitopes and corresponding genes allowing for one mismatch.
 
 ## **Notes**
 - SRA downloads are handled via `fasterq-dump`.
