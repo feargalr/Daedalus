@@ -2,7 +2,7 @@
 set -euo pipefail
 IFS=$'\n\t'
 
-DAEDALUS_VERSION="0.3.1"
+DAEDALUS_VERSION="0.3.2"
 
 
 #======================#
@@ -131,47 +131,104 @@ if [[ ! -e "${NOHUMAN_DB}" ]]; then
 fi
 
 
+# ---------------------------
+# Stage-aware resume / skip logic
+# ---------------------------
+
 mkdir -p "${FASTP_DIR}"
 
-# Handle SRA or local FASTQ
-if [ -n "$SRA_ID" ]; then
-    mkdir -p sra_fastq
-    fasterq-dump $SRA_ID --split-files -O sra_fastq
+msg() { echo "[*] $*"; }
+have() { [[ -s "$1" ]]; }   # file exists and non-empty
 
-    if [ -f "sra_fastq/${SRA_ID}_1.fastq" ] && [ -f "sra_fastq/${SRA_ID}_2.fastq" ]; then
-
-        pigz -p $NUM_CORES -9 sra_fastq/*fastq ; 
-        RAW_R1="sra_fastq/${SRA_ID}_1.fastq.gz"
-        RAW_R2="sra_fastq/${SRA_ID}_2.fastq.gz" 
-    elif [ -f "sra_fastq/${SRA_ID}.fastq" ]; then
-        pigz -p $NUM_CORES -9 sra_fastq/*fastq ;
-        RAW_SE="sra_fastq/${SRA_ID}.fastq.gz"
-    else
-        echo "ERROR: SRA download failed or produced no FASTQ files. Exiting."
-        exit 1
-    fi
+# ---------------------------
+# Determine sample name early (for consistent output naming)
+# ---------------------------
+if [[ -n "$SRA_ID" ]]; then
+  SAMPLE="$SRA_ID"
 else
-    if [ ! -f "$READ1" ] || [ ! -f "$READ2" ]; then
-        echo "ERROR: One or both local FASTQ files not found. Exiting."
-        exit 1
-    fi
-    RAW_R1="${READ1}"; RAW_R2="${READ2}"
+  # derive from READ1 basename: foo_1.fastq.gz -> foo
+  BASE="$(basename "${READ1}")"
+  SAMPLE="${BASE%%_*}"
 fi
 
+# ---------------------------
+# Inputs: SRA download (skip if already present)
+# ---------------------------
+RAW_R1=""; RAW_R2=""; RAW_SE=""
+
+if [[ -n "$SRA_ID" ]]; then
+  mkdir -p sra_fastq
+
+  # Accept either gz or plain fastq from prior runs
+  SRA_R1_GZ="sra_fastq/${SRA_ID}_1.fastq.gz"
+  SRA_R2_GZ="sra_fastq/${SRA_ID}_2.fastq.gz"
+  SRA_SE_GZ="sra_fastq/${SRA_ID}.fastq.gz"
+
+  SRA_R1="sra_fastq/${SRA_ID}_1.fastq"
+  SRA_R2="sra_fastq/${SRA_ID}_2.fastq"
+  SRA_SE="sra_fastq/${SRA_ID}.fastq"
+
+  if have "$SRA_R1_GZ" && have "$SRA_R2_GZ"; then
+    msg "SRA FASTQs already downloaded (PE); skipping fasterq-dump."
+    RAW_R1="$SRA_R1_GZ"; RAW_R2="$SRA_R2_GZ"
+  elif have "$SRA_SE_GZ"; then
+    msg "SRA FASTQ already downloaded (SE); skipping fasterq-dump."
+    RAW_SE="$SRA_SE_GZ"
+  else
+    msg "Downloading SRA via fasterq-dump..."
+    fasterq-dump "$SRA_ID" --split-files -O sra_fastq
+
+    # Compress if fasterq-dump produced plain .fastq
+    if [[ -f "$SRA_R1" && -f "$SRA_R2" ]]; then
+      msg "Compressing SRA FASTQs..."
+      pigz -p "$NUM_CORES" -9 "$SRA_R1" "$SRA_R2"
+      RAW_R1="$SRA_R1_GZ"; RAW_R2="$SRA_R2_GZ"
+    elif [[ -f "$SRA_SE" ]]; then
+      msg "Compressing SRA FASTQ..."
+      pigz -p "$NUM_CORES" -9 "$SRA_SE"
+      RAW_SE="$SRA_SE_GZ"
+    else
+      echo "ERROR: SRA download failed or produced no FASTQ files. Exiting."
+      exit 1
+    fi
+  fi
+
+else
+  # Local fastqs
+  if [[ ! -f "$READ1" || ! -f "$READ2" ]]; then
+    echo "ERROR: One or both local FASTQ files not found. Exiting."
+    exit 1
+  fi
+  RAW_R1="$READ1"; RAW_R2="$READ2"
+fi
 
 # ---------------------------
-# fastp preprocessing
+# Expected outputs for fastp + nohuman (we will reuse if nohuman outputs exist)
 # ---------------------------
-CLEAN_R1=""; CLEAN_R2=""; CLEAN_SE=""
-if [[ -n "${RAW_R1}" && -n "${RAW_R2}" ]]; then
-    BASE="$(basename "${RAW_R1}")"
-    SAMPLE="${BASE%%_*}"  # heuristic; keeps SRR... or sample prefix
-    CLEAN_R1="${FASTP_DIR}/${SAMPLE}_R1.clean.fq.gz"
-    CLEAN_R2="${FASTP_DIR}/${SAMPLE}_R2.clean.fq.gz"
-    REPORT_HTML="${FASTP_DIR}/${SAMPLE}.fastp.html"
-    REPORT_JSON="${FASTP_DIR}/${SAMPLE}.fastp.json"
+CLEAN_R1="${FASTP_DIR}/${SAMPLE}_R1.clean.fq.gz"
+CLEAN_R2="${FASTP_DIR}/${SAMPLE}_R2.clean.fq.gz"
+CLEAN_SE="${FASTP_DIR}/${SAMPLE}.clean.fq.gz"
 
-    echo "[*] Running fastp (PE)..."
+NOHUMAN_R1="${FASTP_DIR}/${SAMPLE}_R1.nohuman.fq.gz"
+NOHUMAN_R2="${FASTP_DIR}/${SAMPLE}_R2.nohuman.fq.gz"
+NOHUMAN_SE="${FASTP_DIR}/${SAMPLE}.nohuman.fq.gz"
+KRAKEN_REPORT="${FASTP_DIR}/${SAMPLE}.nohuman.kraken.report"
+
+REPORT_HTML="${FASTP_DIR}/${SAMPLE}.fastp.html"
+REPORT_JSON="${FASTP_DIR}/${SAMPLE}.fastp.json"
+
+# ---------------------------
+# nohuman step (skip if already done)
+#   If nohuman outputs exist, we don't need to rerun fastp either.
+# ---------------------------
+if have "$NOHUMAN_R1" && have "$NOHUMAN_R2"; then
+  msg "nohuman outputs found (PE); skipping fastp+nohuman."
+elif have "$NOHUMAN_SE"; then
+  msg "nohuman output found (SE); skipping fastp+nohuman."
+else
+  # Run fastp first (PE or SE)
+  if [[ -n "${RAW_R1}" && -n "${RAW_R2}" ]]; then
+    msg "Running fastp (PE)..."
     fastp -w "${NUM_CORES}" \
           -i "${RAW_R1}" -I "${RAW_R2}" \
           -o "${CLEAN_R1}" -O "${CLEAN_R2}" \
@@ -180,105 +237,113 @@ if [[ -n "${RAW_R1}" && -n "${RAW_R2}" ]]; then
           --length_required 50 \
           -h "${REPORT_HTML}" -j "${REPORT_JSON}"
 
-elif [[ -n "${RAW_SE}" ]]; then
-    SAMPLE="$(basename "${RAW_SE}" .fastq.gz)"
-    CLEAN_SE="${FASTP_DIR}/${SAMPLE}.clean.fq.gz"
-    REPORT_HTML="${FASTP_DIR}/${SAMPLE}.fastp.html"
-    REPORT_JSON="${FASTP_DIR}/${SAMPLE}.fastp.json"
+    msg "Running nohuman (PE)..."
+    nohuman \
+      -t "${NUM_CORES}" \
+      -D "${NOHUMAN_DB}" \
+      -o "${NOHUMAN_R1}" \
+      -O "${NOHUMAN_R2}" \
+      -r "${KRAKEN_REPORT}" \
+      "${CLEAN_R1}" "${CLEAN_R2}"
 
-    echo "[*] Running fastp (SE)..."
+  elif [[ -n "${RAW_SE}" ]]; then
+    msg "Running fastp (SE)..."
     fastp -w "${NUM_CORES}" \
           -i "${RAW_SE}" \
           -o "${CLEAN_SE}" \
           --qualified_quality_phred 15 --length_required 50 \
           -h "${REPORT_HTML}" -j "${REPORT_JSON}"
-else
-    echo "ERROR: Input detection failed before fastp."; exit 1
-fi
 
-
-# ---------------------------
-# nohuman filtering
-# ---------------------------
-
-if [[ -n "${CLEAN_R1}" && -n "${CLEAN_R2}" ]]; then
-    NOHUMAN_R1="${FASTP_DIR}/${SAMPLE}_R1.nohuman.fq.gz"
-    NOHUMAN_R2="${FASTP_DIR}/${SAMPLE}_R2.nohuman.fq.gz"
-    KRAKEN_REPORT="${FASTP_DIR}/${SAMPLE}.nohuman.kraken.report"
-
-    echo "[*] Running nohuman (PE)..."
+    msg "Running nohuman (SE)..."
     nohuman \
-        -t "${NUM_CORES}" \
-        -D "${NOHUMAN_DB}" \
-        -o "${NOHUMAN_R1}" \
-        -O "${NOHUMAN_R2}" \
-        -r "${KRAKEN_REPORT}" \
-        "${CLEAN_R1}" "${CLEAN_R2}"
-
-elif [[ -n "${CLEAN_SE}" ]]; then
-    NOHUMAN_SE="${FASTP_DIR}/${SAMPLE}.nohuman.fq.gz"
-    KRAKEN_REPORT="${FASTP_DIR}/${SAMPLE}.nohuman.kraken.report"
-
-    echo "[*] Running nohuman (SE)..."
-    nohuman \
-        -t "${NUM_CORES}" \
-        -D "${NOHUMAN_DB}" \
-        -o "${NOHUMAN_SE}" \
-        -r "${KRAKEN_REPORT}" \
-        "${CLEAN_SE}"
+      -t "${NUM_CORES}" \
+      -D "${NOHUMAN_DB}" \
+      -o "${NOHUMAN_SE}" \
+      -r "${KRAKEN_REPORT}" \
+      "${CLEAN_SE}"
+  else
+    echo "ERROR: Input detection failed before fastp/nohuman."
+    exit 1
+  fi
 fi
 
-
 # ---------------------------
-# MetaSPAdes
+# MetaSPAdes (skip if scaffolds.fasta already present)
 # ---------------------------
+SPADES_DIR="spades_output"
+SCAFFOLDS_FASTA="${SPADES_DIR}/scaffolds.fasta"
 
-echo "Running MetaSPAdes..."
-
-if [[ -n "${NOHUMAN_R1}" && -n "${NOHUMAN_R2}" ]]; then
-  spades.py --meta \
-    -1 "${NOHUMAN_R1}" \
-    -2 "${NOHUMAN_R2}" \
-    -o spades_output \
-    -t "${NUM_CORES}" \
-    --memory "${MEM_GB}"
-elif [[ -n "${NOHUMAN_SE}" ]]; then
-  spades.py --meta \
-    -s "${NOHUMAN_SE}" \
-    -o spades_output \
-    -t "${NUM_CORES}" \
-    --memory "${MEM_GB}"
+if have "$SCAFFOLDS_FASTA"; then
+  msg "Found ${SCAFFOLDS_FASTA}; skipping MetaSPAdes."
 else
-  echo "ERROR: No cleaned reads available for SPAdes."; exit 1
+  msg "Running MetaSPAdes..."
+  mkdir -p "$SPADES_DIR"
+
+  if have "$NOHUMAN_R1" && have "$NOHUMAN_R2"; then
+    spades.py --meta \
+      -1 "${NOHUMAN_R1}" \
+      -2 "${NOHUMAN_R2}" \
+      -o "$SPADES_DIR" \
+      -t "${NUM_CORES}" \
+      --memory "${MEM_GB}"
+  elif have "$NOHUMAN_SE"; then
+    spades.py --meta \
+      -s "${NOHUMAN_SE}" \
+      -o "$SPADES_DIR" \
+      -t "${NUM_CORES}" \
+      --memory "${MEM_GB}"
+  else
+    echo "ERROR: No nohuman reads available for SPAdes."
+    exit 1
+  fi
+
+  # sanity: fail early if spades didn't produce scaffolds
+  if [[ ! -s "$SCAFFOLDS_FASTA" ]]; then
+    echo "ERROR: SPAdes did not produce scaffolds.fasta as expected."
+    exit 1
+  fi
 fi
 
+# ---------------------------
+# Prodigal-GV (skip if proteins.faa already present)
+# ---------------------------
+PROTEINS_FAA="${SPADES_DIR}/proteins.faa"
+
+if have "$PROTEINS_FAA"; then
+  msg "Found ${PROTEINS_FAA}; skipping Prodigal-GV."
+else
+  msg "Running Prodigal-GV..."
+  (
+    cd "$SPADES_DIR"
+    python3 /home/fryan/bin/parallel-prodigal-gv.py \
+      -t "$NUM_CORES" -q \
+      -i scaffolds.fasta \
+      -a proteins.faa
+  )
+
+  if [[ ! -s "$PROTEINS_FAA" ]]; then
+    echo "ERROR: Prodigal did not produce proteins.faa as expected."
+    exit 1
+  fi
+fi
 
 # ---------------------------
-# Prodigal-GV
+# Epitope search (Aho-Corasick)
 # ---------------------------
-cd spades_output
-echo "Running Prodigal-GV..."
-python3 /home/fryan/bin/parallel-prodigal-gv.py -t $NUM_CORES -q -i scaffolds.fasta -a proteins.faa
+msg "Aho-Corasick algorithm epitope search..."
 
-
-# ---------------------------
-# Epitope search
-# ---------------------------
-echo "Aho-Corasick algorithm epitope search..."
-
-EPITOPES=/scratch/pawsey1244/fryan/data_resources/daedalus_db/epitopes.faa
-PROTEINS=proteins.faa                                                      
-OUT=ac_matches.tsv
-
+EPITOPES="$EPI_FASTA"
+PROTEINS="$PROTEINS_FAA"
+OUT="ac_matches.tsv"
 
 conda activate acmatch
 
-WORKDIR="${MYSCRATCH:-$PWD}/acmatch_${SLURM_JOB_ID}"
+JOBTAG="${SLURM_JOB_ID:-$$}"
+WORKDIR="${MYSCRATCH:-$PWD}/acmatch_${JOBTAG}_${SAMPLE}"
 mkdir -p "$WORKDIR"
 cp "$PROTEINS" "$WORKDIR/proteins.faa"
 
 ACMATCH_SCRIPT="$CONDA_PREFIX/share/daedalus/ac_match.py"
-
 if [[ ! -f "$ACMATCH_SCRIPT" ]]; then
   echo "[ERROR] ac_match.py not found at $ACMATCH_SCRIPT"
   echo "Did you install Daedalus correctly?"
@@ -288,22 +353,23 @@ fi
 python "$ACMATCH_SCRIPT" \
   --epitopes "$EPITOPES" \
   --proteins "$WORKDIR/proteins.faa" \
-  --out "$WORKDIR/$OUT" \
+  --out "$OUT" \
   --min-len 8 \
-  --max-len 30 \
+  --max-len 30
 
-
-cp "$WORKDIR/$OUT" .
-
-# clean
 rm -rf "$WORKDIR"
 
-
 # ---------------------------
-# Compress heavy outputs
+# Compress heavy outputs (safe with nullglob)
 # ---------------------------
-echo "Compressing outputs..."
+msg "Compressing outputs..."
 conda activate daedalus
-pigz -p $NUM_CORES -9 *fasta *faa *fastg *gfa
 
-echo "Daedalus pipeline completed successfully!"
+shopt -s nullglob
+to_compress=( "${SPADES_DIR}"/*.fasta "${SPADES_DIR}"/*.faa "${SPADES_DIR}"/*.fastg "${SPADES_DIR}"/*.gfa )
+if (( ${#to_compress[@]} > 0 )); then
+  pigz -p "$NUM_CORES" -9 "${to_compress[@]}"
+fi
+shopt -u nullglob
+
+msg "Daedalus pipeline completed successfully!"

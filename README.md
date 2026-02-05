@@ -1,5 +1,5 @@
 # Daedalus
-**Version:** 0.3.1
+**Version:** 0.3.2
 
 Like its namesake, Daedalus builds things. This pipeline was built for metagenomic assembly and the identification of cross-reactive epitopes. Daedalus is a wrapper pipeline that orchestrates several established bioinformatics tools, and so we *strongly encourage* users cite the underlying software components appropriately in any resulting publications.
 

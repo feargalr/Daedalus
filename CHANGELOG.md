@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.3.2
+- Added skip steps if output files already present 
+
 ## v0.3.1
 - Updated handling of additional acmatch script and conda env
 
