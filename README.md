@@ -6,6 +6,8 @@ Like its namesake, Daedalus builds things. This pipeline was built for metagenom
 Daedalus searches for short, exact peptide matches between predicted microbial proteins and known epitopes, typically in the 8–15 amino acid range. This reflects the biology of antigen presentation, as MHC class I epitopes are usually 8–11 aa, while MHC class II epitopes contain shorter core motifs. T cell cross-reactivity can arise from identical short peptides embedded within otherwise unrelated proteins. For this reason, epitope detection is treated as a string-matching problem, rather than a homology search.
 To efficiently detect these matches at scale, Daedalus uses the Aho–Corasick algorithm, which enables simultaneous, exact matching of millions of epitope sequences against large protein databases in a single pass.
 
+## **Database**
+We provide a fasta file of epitope sequences from the the Immune Epitope Database (IEDB) in late 2025 for ease of use. This is not the entire database but is filtered for human, or human related pathogens. Uncompress before use. It is small (~13MB uncompressed).
 
 ## **Overview**
 **Daedalus** assembles metagenomes, predicts genes, and identifies cross-reactive epitopes from metagenomic data. It integrates:
@@ -53,22 +55,37 @@ cd Daedalus
 
 ### **2. Install dependencies**
 ```bash
+
+#First create conda envs
 conda env create -f conda_ymls/daedalus_env.yml
 conda env create -f conda_ymls/acmatch_env.yml
+
+#Second ensure daedalus scripts are in paths for individual envs
 conda activate daedalus
-
-# After activating the conda environment, install the `daedalus` executable and ac_match script into the environment:
-
 cp daedalus "$CONDA_PREFIX/bin/daedalus"
 
+conda activate acmatch
 mkdir -p "$CONDA_PREFIX/share/daedalus"
 cp scripts/ac_match.py "$CONDA_PREFIX/share/daedalus/ac_match.py"
 
-#For multi-threaded gene prediction use the parallel-prodigal-gv.py script available here
-git clone https://github.com/apcamargo/prodigal-gv
-#Then copy or symlink `parallel-prodigal-gv.py` to your `$PATH`, or edit the path in `daedalus.sh` to match your setup.
 
-#Ensure the nohuman db location is either specified with the flag or set at the $NOHUMAN_DB variable.
+#Third.For multi-threaded gene prediction we use the parallel-prodigal-gv.py
+git clone https://github.com/apcamargo/prodigal-gv
+conda activate daedalus
+mkdir -p "$CONDA_PREFIX/share/daedalus"
+cp prodigal-gv/parallel-prodigal-gv.py "$CONDA_PREFIX/share/daedalus/parallel-prodigal-gv.py"
+
+# Fourth. Download the nohuman db
+conda activate daedalus
+nohuman --download --db /example_directory/nohuman_db
+
+# Add this to your ~/.bashrc (or ~/.zshrc)
+export NOHUMAN_DB="/example_directory/nohuman_db"
+
+# Fifth. Uncompress / prepare your epitope database for Daedalus
+gunzip iedb.fasta.gz
+
+#Alternatively prepare your own database of sequences. 
 
 ```
 
